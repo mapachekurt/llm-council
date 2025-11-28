@@ -1,0 +1,40 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Allow users to read and write their own conversation data.
+    // This rule assumes you have implemented Firebase Authentication and are
+    // passing the user'''s UID when creating or querying conversations.
+    match /conversations/{conversationId} {
+      // Anyone can create a conversation, but they must be logged in.
+      allow create: if request.auth != null;
+
+      // Only users who are part of the conversation (e.g., have their UID on it)
+      // can read or update it. For a simple 1-user-per-conversation model:
+      allow read, update: if request.auth.uid == resource.data.userId;
+
+      match /messages/{messageId} {
+        // Messages can be created by any authenticated user.
+        allow create: if request.auth != null;
+
+        // Messages can only be read by users who have access to the parent conversation.
+        allow read: if get(/databases/$(database)/documents/conversations/$(conversationId)).data.userId == request.auth.uid;
+      }
+    }
+
+    // A more permissive rule for development (BE CAREFUL IN PRODUCTION):
+    // This allows any authenticated user to read/write to the database.
+    // Useful if you are not implementing per-user data separation yet.
+    /*
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+    */
+
+    // Default deny: For any path not matched above, access is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

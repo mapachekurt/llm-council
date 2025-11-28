@@ -1,115 +1,56 @@
+const API_BASE_URL = '/api'; // All requests will be proxied by Firebase Hosting
+
 /**
- * API client for the LLM Council backend.
+ * Fetches all conversations from the backend.
+ * NOTE: With Firestore, this would typically be handled by the Firebase SDK on the client.
+ * This is a placeholder and may not be the most efficient way.
  */
+export const getConversations = async () => {
+  // This function will need to be re-implemented using the Firebase Client SDK
+  // to list conversations from Firestore, ideally with authentication.
+  console.warn("getConversations is not implemented for Firestore yet.");
+  return []; // Returning empty for now.
+};
 
-const API_BASE = 'http://localhost:8001';
+/**
+ * Creates a new conversation.
+ * In our new model, a conversation is implicitly created by the first message.
+ */
+export const createConversation = async () => {
+    // We generate a unique ID on the client-side. This could also be done on the backend.
+    const id = `conv_${new Date().getTime()}_${Math.random().toString(36).substring(2, 9)}`;
+    return { id };
+};
 
-export const api = {
-  /**
-   * List all conversations.
-   */
-  async listConversations() {
-    const response = await fetch(`${API_BASE}/api/conversations`);
-    if (!response.ok) {
-      throw new Error('Failed to list conversations');
-    }
-    return response.json();
-  },
 
-  /**
-   * Create a new conversation.
-   */
-  async createConversation() {
-    const response = await fetch(`${API_BASE}/api/conversations`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({}),
-    });
-    if (!response.ok) {
-      throw new Error('Failed to create conversation');
-    }
-    return response.json();
-  },
+/**
+ * Sends a message to a specific conversation and gets the LLM council'''s response.
+ * @param {string} id - The conversation ID.
+ * @param {string} prompt - The user'''s message.
+ * @returns {Promise<object>} - The assistant'''s response object with all stages and metadata.
+ */
+export const sendMessage = async (id, prompt) => {
+  const response = await fetch(`${API_BASE_URL}/conversations/${id}/message`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ prompt }),
+  });
 
-  /**
-   * Get a specific conversation.
-   */
-  async getConversation(conversationId) {
-    const response = await fetch(
-      `${API_BASE}/api/conversations/${conversationId}`
-    );
-    if (!response.ok) {
-      throw new Error('Failed to get conversation');
-    }
-    return response.json();
-  },
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to send message: ${errorText}`);
+  }
 
-  /**
-   * Send a message in a conversation.
-   */
-  async sendMessage(conversationId, content) {
-    const response = await fetch(
-      `${API_BASE}/api/conversations/${conversationId}/message`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ content }),
-      }
-    );
-    if (!response.ok) {
-      throw new Error('Failed to send message');
-    }
-    return response.json();
-  },
+  return response.json();
+};
 
-  /**
-   * Send a message and receive streaming updates.
-   * @param {string} conversationId - The conversation ID
-   * @param {string} content - The message content
-   * @param {function} onEvent - Callback function for each event: (eventType, data) => void
-   * @returns {Promise<void>}
-   */
-  async sendMessageStream(conversationId, content, onEvent) {
-    const response = await fetch(
-      `${API_BASE}/api/conversations/${conversationId}/message/stream`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ content }),
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error('Failed to send message');
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      const chunk = decoder.decode(value);
-      const lines = chunk.split('\n');
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6);
-          try {
-            const event = JSON.parse(data);
-            onEvent(event.type, event);
-          } catch (e) {
-            console.error('Failed to parse SSE event:', e);
-          }
-        }
-      }
-    }
-  },
+/**
+ * Fetches messages for a specific conversation.
+ * NOTE: This should also be replaced with the Firebase Client SDK for real-time updates.
+ */
+export const getMessages = async (id) => {
+  console.warn("getMessages is not implemented for Firestore yet.");
+  return []; // Returning empty for now.
 };
