@@ -1,21 +1,18 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+# Firebase
+firebase-debug.log
 
-# Virtual environments
-.venv
+# Node
+node_modules
+.npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Keys and secrets
-.env
+# Frontend Build
+frontend/dist
+frontend/build
 
-# Data files
-data/
-
-# Frontend
-frontend/node_modules/
-frontend/dist/
-frontend/.vite/
+# IDE / OS
+.idea
+.vscode/
+.DS_Store
