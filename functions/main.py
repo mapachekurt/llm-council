@@ -6,11 +6,12 @@ from firebase_functions import https_fn
 # Import the configuration and core logic
 from . import config
 from . import council
+from . import auth
 
 # Get a reference to the Firestore database
 db = firestore.client()
 
-@https_fn.on_request(secrets=[config.OPENROUTER_API_KEY])
+@https_fn.on_request(secrets=[config.OPENROUTER_API_KEY, config.CLERK_SECRET_KEY])
 def on_message(req: https_fn.Request) -> https_fn.Response:
     """Firebase Function to handle a new message in a conversation."""
     # Set CORS headers for preflight and actual requests
@@ -27,11 +28,33 @@ def on_message(req: https_fn.Request) -> https_fn.Response:
         return https_fn.Response("Method Not Allowed", status=405, headers=headers)
 
     try:
-        # Extract conversation ID from the URL path, e.g., /on_message/12345
+        # --- Verify Authentication ---
+        auth_header = req.headers.get('Authorization', '')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return https_fn.Response("Unauthorized: Missing or invalid Authorization header", status=401, headers=headers)
+
+        token = auth_header.split(' ')[1]
+
+        try:
+            decoded_token = auth.verify_clerk_token(token, config.CLERK_SECRET_KEY.value)
+            user_id = auth.extract_user_id(decoded_token)
+        except Exception as e:
+            print(f"Authentication error: {e}")
+            return https_fn.Response(f"Unauthorized: {str(e)}", status=401, headers=headers)
+
+        print(f"Authenticated user: {user_id}")
+
+        # Extract conversation ID from the URL path, e.g., /api/conversations/12345/message
         path_parts = req.path.split('/')
-        if len(path_parts) < 2 or not path_parts[-1]:
-            return https_fn.Response("Missing conversation ID.", status=400, headers=headers)
-        conversation_id = path_parts[-1]
+        # Path format: ['', 'api', 'conversations', '{id}', 'message']
+        if 'conversations' in path_parts:
+            conv_index = path_parts.index('conversations')
+            if conv_index + 1 < len(path_parts):
+                conversation_id = path_parts[conv_index + 1]
+            else:
+                return https_fn.Response("Missing conversation ID.", status=400, headers=headers)
+        else:
+            return https_fn.Response("Invalid API path.", status=400, headers=headers)
 
         # Get the user'''s prompt from the request body
         data = req.get_json()
@@ -70,8 +93,11 @@ def on_message(req: https_fn.Request) -> https_fn.Response:
         # Use a transaction or batch write for atomicity
         batch = db.batch()
 
-        # Set conversation creation timestamp if it'''s a new conversation
-        batch.set(conversation_ref, {"createdAt": firestore.SERVER_TIMESTAMP}, merge=True)
+        # Set conversation creation timestamp and user ID if it's a new conversation
+        batch.set(conversation_ref, {
+            "createdAt": firestore.SERVER_TIMESTAMP,
+            "userId": user_id
+        }, merge=True)
 
         # Save the user'''s message
         batch.set(user_message_ref, {

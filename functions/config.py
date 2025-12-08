@@ -89,6 +89,12 @@ if not CHAIRMAN_MODEL:
 # You will be prompted to enter the secret value.
 OPENROUTER_API_KEY = options.SecretOption("OPENROUTER_API_KEY")
 
+# --- Clerk Authentication Configuration ---
+# Get the Clerk secret key from Firebase Functions secrets
+# To set this, run:
+# firebase functions:secrets:set CLERK_SECRET_KEY
+CLERK_SECRET_KEY = options.SecretOption("CLERK_SECRET_KEY")
+
 print("--- Configuration Loaded ---")
 print(f"Project ID: {project_id}")
 print(f"Council Models: {COUNCIL_MODELS}")

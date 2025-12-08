@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { AuthWrapper } from './components/AuthWrapper';
 import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
-import { getConversations, createConversation, getMessages, sendMessage } from './api';
+import { useApi } from './api';
 import './App.css';
 
 function App() {
+  const api = useApi();
   const [conversations, setConversations] = useState([]);
   const [currentConversationId, setCurrentConversationId] = useState(null);
   const [currentConversation, setCurrentConversation] = useState(null);
@@ -24,7 +26,7 @@ function App() {
 
   const loadConversations = async () => {
     try {
-      const convs = await getConversations();
+      const convs = await api.getConversations();
       setConversations(convs);
     } catch (error) {
       console.error('Failed to load conversations:', error);
@@ -33,7 +35,7 @@ function App() {
 
   const loadConversation = async (id) => {
     try {
-      const conv = await getMessages(id);
+      const conv = await api.getMessages(id);
       setCurrentConversation({ id, messages: conv });
     } catch (error) {
       console.error('Failed to load conversation:', error);
@@ -42,7 +44,7 @@ function App() {
 
   const handleNewConversation = async () => {
     try {
-      const newConv = await createConversation();
+      const newConv = await api.createConversation();
       setConversations([
         { id: newConv.id, created_at: new Date().toISOString(), message_count: 0 },
         ...conversations,
@@ -70,7 +72,7 @@ function App() {
         messages: [...(prev?.messages ?? []), userMessage],
       }));
 
-      const response = await sendMessage(currentConversationId, content);
+      const response = await api.sendMessage(currentConversationId, content);
 
       setCurrentConversation((prev) => ({
         ...prev,
@@ -91,19 +93,21 @@ function App() {
   };
 
   return (
-    <div className="app">
-      <Sidebar
-        conversations={conversations}
-        currentConversationId={currentConversationId}
-        onSelectConversation={handleSelectConversation}
-        onNewConversation={handleNewConversation}
-      />
-      <ChatInterface
-        conversation={currentConversation}
-        onSendMessage={handleSendMessage}
-        isLoading={isLoading}
-      />
-    </div>
+    <AuthWrapper>
+      <div className="app">
+        <Sidebar
+          conversations={conversations}
+          currentConversationId={currentConversationId}
+          onSelectConversation={handleSelectConversation}
+          onNewConversation={handleNewConversation}
+        />
+        <ChatInterface
+          conversation={currentConversation}
+          onSendMessage={handleSendMessage}
+          isLoading={isLoading}
+        />
+      </div>
+    </AuthWrapper>
   );
 }
 

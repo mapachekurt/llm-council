@@ -2,3 +2,5 @@ firebase-functions
 firebase-admin
 requests
 aiohttp
+pyjwt
+cryptography
