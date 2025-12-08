@@ -1,4 +1,5 @@
 import json
+import asyncio
 from datetime import datetime
 from firebase_admin import firestore
 from firebase_functions import https_fn
@@ -33,7 +34,7 @@ def on_message(req: https_fn.Request) -> https_fn.Response:
             return https_fn.Response("Missing conversation ID.", status=400, headers=headers)
         conversation_id = path_parts[-1]
 
-        # Get the user'''s prompt from the request body
+        # Get the user's prompt from the request body
         data = req.get_json()
         user_prompt = data.get("prompt")
         if not user_prompt:
@@ -42,18 +43,10 @@ def on_message(req: https_fn.Request) -> https_fn.Response:
         # Retrieve the OpenRouter API key from the secrets
         api_key = config.OPENROUTER_API_KEY.value
 
-        # --- Execute the 3-Stage Council Process ---
-        print(f"Executing Stage 1 for conversation {conversation_id}...")
-        stage1_responses = council.stage1_collect_responses(config.COUNCIL_MODELS, user_prompt, api_key)
-
-        print("Executing Stage 2...")
-        stage2_rankings, label_to_model, _ = council.stage2_collect_rankings(
-            stage1_responses, user_prompt, api_key, config.COUNCIL_MODELS
-        )
-
-        print("Executing Stage 3...")
-        stage3_response = council.stage3_synthesize_final(
-            stage1_responses, stage2_rankings, user_prompt, api_key, config.CHAIRMAN_MODEL
+        # --- Execute the 3-Stage Council Process (async) ---
+        print(f"Executing 3-stage council process for conversation {conversation_id}...")
+        stage1_responses, stage2_rankings, label_to_model, stage3_response = asyncio.run(
+            run_full_council_async(user_prompt, api_key)
         )
 
         # --- Calculate Aggregate Rankings for Metadata ---
@@ -62,33 +55,29 @@ def on_message(req: https_fn.Request) -> https_fn.Response:
         # --- Persist to Firestore ---
         print("Persisting results to Firestore...")
         conversation_ref = db.collection("conversations").document(conversation_id)
-        
-        # Create a new message document in the 'messages' subcollection
-        assistant_message_ref = conversation_ref.collection("messages").document()
-        user_message_ref = conversation_ref.collection("messages").document()
 
-        # Use a transaction or batch write for atomicity
+        # Use a batch write for atomicity
         batch = db.batch()
 
-        # Set conversation creation timestamp if it'''s a new conversation
+        # Set conversation creation timestamp if it's a new conversation
         batch.set(conversation_ref, {"createdAt": firestore.SERVER_TIMESTAMP}, merge=True)
 
-        # Save the user'''s message
-        batch.set(user_message_ref, {
+        # Save the user's message
+        user_msg_ref = conversation_ref.collection("messages").document()
+        batch.set(user_msg_ref, {
             "role": "user",
             "content": user_prompt,
             "createdAt": firestore.SERVER_TIMESTAMP
         })
 
-        # Save the assistant'''s multi-stage response
-        batch.set(assistant_message_ref, {
+        # Save the assistant's multi-stage response
+        assistant_msg_ref = conversation_ref.collection("messages").document()
+        batch.set(assistant_msg_ref, {
             "role": "assistant",
             "createdAt": firestore.SERVER_TIMESTAMP,
             "stage1": stage1_responses,
             "stage2": stage2_rankings,
             "stage3": stage3_response,
-            # Metadata is not persisted to save space and cost, as per original design.
-            # It'''s generated on the fly and returned to the client.
         })
 
         batch.commit()
@@ -96,7 +85,7 @@ def on_message(req: https_fn.Request) -> https_fn.Response:
 
         # --- Prepare the API Response ---
         response_data = {
-            "id": assistant_message_ref.id,
+            "id": assistant_msg_ref.id,
             "role": "assistant",
             "stage1": stage1_responses,
             "stage2": stage2_rankings,
@@ -114,3 +103,34 @@ def on_message(req: https_fn.Request) -> https_fn.Response:
         import traceback
         traceback.print_exc()
         return https_fn.Response(f"Internal Server Error: {e}", status=500, headers=headers)
+
+
+async def run_full_council_async(user_prompt: str, api_key: str):
+    """Execute the full 3-stage council process asynchronously."""
+    try:
+        # Stage 1: Collect responses
+        print("Stage 1: Collecting responses from council members...")
+        stage1_responses = await council.stage1_collect_responses(
+            config.COUNCIL_MODELS, user_prompt, api_key
+        )
+
+        if not stage1_responses:
+            raise ValueError("No responses received from council members in Stage 1")
+
+        # Stage 2: Collect rankings
+        print("Stage 2: Collecting peer evaluations...")
+        stage2_rankings, label_to_model = await council.stage2_collect_rankings(
+            stage1_responses, user_prompt, api_key, config.COUNCIL_MODELS
+        )
+
+        # Stage 3: Synthesize final answer
+        print("Stage 3: Synthesizing final answer...")
+        stage3_response = await council.stage3_synthesize_final(
+            stage1_responses, stage2_rankings, user_prompt, api_key, config.CHAIRMAN_MODEL
+        )
+
+        return stage1_responses, stage2_rankings, label_to_model, stage3_response
+
+    except Exception as e:
+        print(f"Error in council process: {e}")
+        raise

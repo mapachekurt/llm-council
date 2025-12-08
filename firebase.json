@@ -4,10 +4,11 @@
   },
   "functions": {
     "source": "functions",
-    "runtime": "python312"
+    "runtime": "python312",
+    "codebase": "llm-council"
   },
   "hosting": {
-    "site": "llm-council-32883946-c7fc0",
+    "site": "llm-council",
     "public": "frontend/dist",
     "ignore": [
       "firebase.json",
@@ -16,7 +17,7 @@
     ],
     "rewrites": [
       {
-        "source": "/api/**",
+        "source": "/api/conversations/**",
         "function": "on_message"
       },
       {

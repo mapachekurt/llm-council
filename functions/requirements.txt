@@ -1,4 +1,4 @@
-firebase-functions
-firebase-admin
-requests
-aiohttp
+firebase-functions>=0.4.0
+firebase-admin>=6.2.0
+aiohttp>=3.8.0
+asyncio>=3.4.3

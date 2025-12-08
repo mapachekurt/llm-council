@@ -1,13 +1,17 @@
+"""OpenRouter API client for LLM queries."""
+
 import aiohttp
 import asyncio
-import os
-import json
+from typing import Optional, Dict, Any, List
 
-# The API key is now passed as an argument to the functions
-# that need it, making the functions more pure and testable.
 
-async def query_model(session, model: str, prompt: str, api_key: str):
-    """Queries a single model on OpenRouter and returns the response."""
+async def query_model(
+    session: aiohttp.ClientSession,
+    model: str,
+    prompt: str,
+    api_key: str
+) -> Optional[Dict[str, Any]]:
+    """Query a single model on OpenRouter and return the response."""
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -21,11 +25,15 @@ async def query_model(session, model: str, prompt: str, api_key: str):
     }
 
     try:
-        async with session.post(url, headers=headers, json=data, timeout=aiohttp.ClientTimeout(total=120)) as response:
+        async with session.post(
+            url,
+            headers=headers,
+            json=data,
+            timeout=aiohttp.ClientTimeout(total=120)
+        ) as response:
             if response.status == 200:
                 response_data = await response.json()
                 content = response_data['choices'][0]['message']['content']
-                # The structure might include reasoning details, so we return a dictionary.
                 return {
                     "model": model,
                     "content": content,
@@ -42,8 +50,13 @@ async def query_model(session, model: str, prompt: str, api_key: str):
         print(f"Exception while querying {model}: {e}")
         return None
 
-async def query_models_parallel(models: list, prompt: str, api_key: str):
-    """Queries multiple models in parallel and returns a list of their responses."""
+
+async def query_models_parallel(
+    models: List[str],
+    prompt: str,
+    api_key: str
+) -> List[Dict[str, Any]]:
+    """Query multiple models in parallel and return list of responses."""
     async with aiohttp.ClientSession() as session:
         tasks = [query_model(session, model, prompt, api_key) for model in models]
         results = await asyncio.gather(*tasks)

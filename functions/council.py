@@ -4,15 +4,15 @@ import re
 from .openrouter import query_models_parallel
 
 # --- Stage 1: Collect Initial Responses ---
-def stage1_collect_responses(models: list, prompt: str, api_key: str):
-    """Queries all council models in parallel for their initial responses."""
-    return asyncio.run(query_models_parallel(models, prompt, api_key))
+async def stage1_collect_responses(models: list, prompt: str, api_key: str):
+    """Async: Queries all council models in parallel for their initial responses."""
+    return await query_models_parallel(models, prompt, api_key)
 
 # --- Stage 2: Collect Peer Rankings ---
-def stage2_collect_rankings(stage1_responses: list, question: str, api_key: str, council_models: list):
-    """Anonymizes responses and asks each model to rank its peers."""
+async def stage2_collect_rankings(stage1_responses: list, question: str, api_key: str, council_models: list):
+    """Async: Anonymizes responses and asks each model to rank its peers."""
     if not stage1_responses:
-        return [], {}, []
+        return [], {}
 
     # Anonymize the responses into a dictionary of "Response A", "Response B", etc.
     # This prevents models from being biased towards their own output.
@@ -22,29 +22,26 @@ def stage2_collect_rankings(stage1_responses: list, question: str, api_key: str,
 
     # Construct the prompt for evaluation
     ranking_prompt = (
-        f"You are a member of an LLM council tasked with evaluating responses to a user'''s question. "
-        f"The user'''s original question was: \"{question}\".\n\n"
+        f"You are a member of an LLM council tasked with evaluating responses to a user's question. "
+        f"The user's original question was: \"{question}\".\n\n"
         f"Here are the anonymized responses from your fellow council members:\n\n"
         f"{anonymized_responses_text}\n\n"
         f"Your task is to act as an impartial judge. Please evaluate the quality of each response based on accuracy, clarity, and insight. "
         f"Provide a brief evaluation for each response, and then provide a final ranking in a specific format.\n\n"
         f"Instructions:\n"
         f"1. Write a short critique for each response (e.g., \"Response A is good but misses a key point...\").\n"
-        f"2. After your evaluations, you MUST include a section that starts with the header '''FINAL RANKING:'''.\n"
+        f"2. After your evaluations, you MUST include a section that starts with the header 'FINAL RANKING:'.\n"
         f"3. In this section, list the responses in order from best to worst. For example: \"1. Response C\", \"2. Response A\", \"3. Response B\".\n"
         f"4. Do not add any text after the final ranking list."
     )
 
     # Query all models again for their rankings
-    # We exclude the model being asked to rank from the list of models being queried,
-    # but for simplicity in this parallel implementation, we query all.
-    # A more advanced version could have each model rank all *other* models.
-    ranking_responses = asyncio.run(query_models_parallel(council_models, ranking_prompt, api_key))
+    ranking_responses = await query_models_parallel(council_models, ranking_prompt, api_key)
 
     # Parse the rankings from the raw text responses
     parsed_rankings = []
     for ranking_resp in ranking_responses:
-        if ranking_resp and ranking_resp['content']:
+        if ranking_resp and ranking_resp.get('content'):
             parsed, raw_text = parse_ranking_from_text(ranking_resp['content'], list(label_to_model.keys()))
             parsed_rankings.append({
                 "model": ranking_resp["model"],
@@ -52,7 +49,7 @@ def stage2_collect_rankings(stage1_responses: list, question: str, api_key: str,
                 "parsed_ranking": parsed
             })
 
-    return parsed_rankings, label_to_model, ranking_responses
+    return parsed_rankings, label_to_model
 
 def parse_ranking_from_text(text: str, labels: list):
     """Extracts the ordered list of ranked responses from the evaluation text."""
@@ -81,8 +78,8 @@ def _extract_labels_in_order(text: str, labels: list):
 
 
 # --- Stage 3: Synthesize Final Answer ---
-def stage3_synthesize_final(stage1_responses: list, stage2_rankings: list, question: str, api_key: str, chairman_model: str):
-    """Asks a chairman model to synthesize the final answer based on all inputs."""
+async def stage3_synthesize_final(stage1_responses: list, stage2_rankings: list, question: str, api_key: str, chairman_model: str):
+    """Async: Asks a chairman model to synthesize the final answer based on all inputs."""
     if not stage1_responses:
         return {"content": "I am sorry, but I was unable to generate a response."}
 
@@ -91,8 +88,8 @@ def stage3_synthesize_final(stage1_responses: list, stage2_rankings: list, quest
     s2_text = "\n\n".join([f'Evaluator: {ranking["model"]}\nCritique: {ranking["evaluation_text"]}' for ranking in stage2_rankings])
 
     synthesis_prompt = (
-        f"You are the Chairman of an LLM council. Your task is to synthesize a final, high-quality answer to a user'''s question based on the submissions and peer reviews from the council members.\n\n"
-        f"The user'''s original question was: \"{question}\".\n\n"
+        f"You are the Chairman of an LLM council. Your task is to synthesize a final, high-quality answer to a user's question based on the submissions and peer reviews from the council members.\n\n"
+        f"The user's original question was: \"{question}\".\n\n"
         f"--- STAGE 1: Initial Responses ---\n"
         f"Here are the initial responses from the council members:\n\n{s1_text}\n\n"
         f"--- STAGE 2: Peer Evaluations ---\n"
@@ -100,11 +97,11 @@ def stage3_synthesize_final(stage1_responses: list, stage2_rankings: list, quest
         f"--- Your Task ---\n"
         f"Synthesize all of this information into a single, comprehensive, and well-written final answer for the user. "
         f"Your answer should be the definitive response, drawing on the strengths of the best submissions and correcting any identified flaws. "
-        f"Do not refer to the stages or the council directly in your final output. Simply provide the best possible answer to the user'''s question."
+        f"Do not refer to the stages or the council directly in your final output. Simply provide the best possible answer to the user's question."
     )
 
     # Query the chairman model
-    final_response = asyncio.run(query_models_parallel([chairman_model], synthesis_prompt, api_key))
+    final_response = await query_models_parallel([chairman_model], synthesis_prompt, api_key)
     return final_response[0] if final_response else {"content": "The chairman failed to generate a response."}
 
 # --- Utility Functions ---
@@ -118,7 +115,7 @@ def calculate_aggregate_rankings(stage2_rankings: list, label_to_model: dict):
 
     for ranking in stage2_rankings:
         # A ranked list like ["Response C", "Response A", "Response B"]
-        ranked_labels = ranking["parsed_ranking"]
+        ranked_labels = ranking.get("parsed_ranking", [])
         for i, label in enumerate(ranked_labels):
             # Assign points based on rank (e.g., 1st place gets more points)
             score = len(ranked_labels) - i

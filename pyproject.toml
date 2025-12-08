@@ -1,13 +1,14 @@
 [project]
 name = "llm-council"
 version = "0.1.0"
-description = "Your LLM Council"
+description = "CTO Council - 3-stage LLM deliberation system with specialized personas"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "python-dotenv>=1.0.0",
-    "httpx>=0.27.0",
+    "aiohttp>=3.8.0",
     "pydantic>=2.9.0",
+    "firebase-admin>=6.2.0",
 ]
