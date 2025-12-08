@@ -1,6 +1,6 @@
 """FastAPI backend for LLM Council with Firestore storage."""
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Any
@@ -10,6 +10,7 @@ import json
 from . import config
 from . import storage_firestore
 from . import council
+from . import slack_handler
 
 app = FastAPI(title="LLM Council API")
 
@@ -129,6 +130,37 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
         "stage2": stage2_results,
         "stage3": stage3_result,
         "metadata": metadata
+    }
+
+
+# ============================================================================
+# SLACK INTEGRATION ENDPOINTS
+# ============================================================================
+
+@app.post("/slack/events")
+async def handle_slack_events(request: Request):
+    """Handle Slack events (messages, mentions, etc.)"""
+    body = await request.body()
+    payload = await request.json()
+
+    # Verify request signature
+    timestamp = request.headers.get("X-Slack-Request-Timestamp", "")
+    signature = request.headers.get("X-Slack-Signature", "")
+
+    if not slack_handler.slack_handler.verify_slack_signature(timestamp, signature, body.decode()):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # Handle the event
+    return await slack_handler.slack_handler.handle_event(payload)
+
+
+@app.get("/health/slack")
+async def slack_health_check():
+    """Check if Slack integration is configured"""
+    return {
+        "status": "ok",
+        "slack_configured": bool(slack_handler.slack_handler.bot_token),
+        "service": "LLM Council Slack Integration"
     }
 
 
